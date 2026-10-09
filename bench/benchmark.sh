@@ -13,6 +13,7 @@ CLIENTS="${CLIENTS:-50}"
 REQUESTS="${REQUESTS:-200000}"
 PIPELINE="${PIPELINE:-1}"
 RUNS="${RUNS:-3}"   # repeat and keep the median, since one run can be noisy
+KEYSPACE="${KEYSPACE:-0}"  # >0: random keys from this many (redis-benchmark -r); 0: one fixed key
 KV_PORT=6391
 REDIS_PORT=6392
 mkdir -p results
@@ -27,7 +28,8 @@ sleep 1
 bench() {  # bench PORT TEST → median requests/sec over RUNS runs
   local port=$1 test=$2 i out rps=()
   for ((i = 0; i < RUNS; i++)); do
-    out=$(redis-benchmark -p "$port" -c "$CLIENTS" -n "$REQUESTS" -P "$PIPELINE" -t "$test" -q 2>/dev/null | tr '\r' '\n' | grep -E "^$(echo "$test" | tr a-z A-Z):" | tail -1)
+    local r=(); [ "$KEYSPACE" -gt 0 ] && r=(-r "$KEYSPACE")
+    out=$(redis-benchmark -p "$port" -c "$CLIENTS" -n "$REQUESTS" -P "$PIPELINE" ${r[@]+"${r[@]}"} -t "$test" -q 2>/dev/null | tr '\r' '\n' | grep -E "^$(echo "$test" | tr a-z A-Z):" | tail -1)
     rps+=("$(echo "$out" | sed -E 's/.*: ([0-9.]+) requests per second.*/\1/')")
   done
   printf '%s\n' "${rps[@]}" | sort -n | sed -n "$(( (RUNS + 1) / 2 ))p"
@@ -35,12 +37,12 @@ bench() {  # bench PORT TEST → median requests/sec over RUNS runs
 
 commit=$(git rev-parse --short HEAD)
 dirty=$([ -z "$(git status --porcelain --untracked-files=no)" ] && echo false || echo true)
-echo "clients=$CLIENTS requests=$REQUESTS pipeline=$PIPELINE runs=$RUNS (median)"
+echo "clients=$CLIENTS requests=$REQUESTS pipeline=$PIPELINE keyspace=$KEYSPACE runs=$RUNS (median)"
 printf '%-6s %14s %14s %8s\n' test kv-store redis ratio
 for test in set get; do
   kv=$(bench "$KV_PORT" "$test")
   rd=$(bench "$REDIS_PORT" "$test")
   ratio=$(python3 -c "print(round($kv / $rd, 3))")
   printf '%-6s %14s %14s %8s\n' "$test" "$kv" "$rd" "$ratio"
-  echo "{\"test\": \"$test\", \"clients\": $CLIENTS, \"requests\": $REQUESTS, \"pipeline\": $PIPELINE, \"runs\": $RUNS, \"kv_store_rps\": $kv, \"redis_rps\": $rd, \"ratio\": $ratio, \"redis_version\": \"$(redis-server --version | grep -oE 'v=[0-9.]+' | cut -d= -f2)\", \"commit\": \"$commit\", \"dirty\": $dirty, \"timestamp\": \"$(date +%Y-%m-%dT%H:%M:%S)\"}" >> results/benchmark.jsonl
+  echo "{\"test\": \"$test\", \"clients\": $CLIENTS, \"requests\": $REQUESTS, \"pipeline\": $PIPELINE, \"keyspace\": $KEYSPACE, \"runs\": $RUNS, \"kv_store_rps\": $kv, \"redis_rps\": $rd, \"ratio\": $ratio, \"redis_version\": \"$(redis-server --version | grep -oE 'v=[0-9.]+' | cut -d= -f2)\", \"commit\": \"$commit\", \"dirty\": $dirty, \"timestamp\": \"$(date +%Y-%m-%dT%H:%M:%S)\"}" >> results/benchmark.jsonl
 done
