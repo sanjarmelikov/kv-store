@@ -41,6 +41,8 @@ private:
         size_t out_pos = 0;
         bool want_write = false;
         bool close_after_write = false;
+        Command cmd;  // reused for every command on this connection
+        std::string parse_error;
     };
 
     void accept_clients();

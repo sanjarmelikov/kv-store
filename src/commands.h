@@ -21,7 +21,10 @@ public:
     void replay(const Command& cmd);
 
 private:
-    void log(Command cmd);
+    // True when writes must be appended to the AOF. Every log({...}) call is guarded
+    // by this, so the command copy is only built when persistence is on.
+    bool logging() const { return aof_ && !replaying_; }
+    void log(const Command& cmd);
     Store& store_;
     Aof* aof_;
     bool replaying_ = false;

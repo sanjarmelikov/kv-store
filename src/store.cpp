@@ -48,6 +48,11 @@ std::optional<std::string> Store::get(const std::string& key) {
     return e->value;
 }
 
+const std::string* Store::find(const std::string& key) {
+    Entry* e = find_live(key);
+    return e ? &e->value : nullptr;
+}
+
 void Store::set(const std::string& key, std::string value, std::optional<Millis> expire_at) {
     Entry& e = map_[key];
     e.value = std::move(value);

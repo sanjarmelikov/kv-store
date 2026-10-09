@@ -31,6 +31,11 @@ struct ParseResult {
 // and "inline" commands (plain text lines like `PING\r\n`, which redis-cli and telnet send).
 ParseResult parse_command(std::string_view buf);
 
+// Same, but fills `out` in place so a connection can reuse one Command (and its strings'
+// capacity) for every command it receives: no allocation per command in steady state.
+// Returns Ok / Incomplete / Error; on Ok sets `consumed`, on Error sets `error`.
+ParseStatus parse_command_into(std::string_view buf, Command& out, size_t& consumed, std::string& error);
+
 // Reply encoders: each appends one RESP value to `out`.
 void reply_simple(std::string& out, std::string_view s);        // +OK
 void reply_error(std::string& out, std::string_view msg);       // -ERR ...

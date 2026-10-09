@@ -6,6 +6,13 @@ namespace kv {
 
 namespace {
 
+// Append a decimal integer without allocating a temporary string.
+void append_int(std::string& out, int64_t n) {
+    char buf[24];
+    auto [end, ec] = std::to_chars(buf, buf + sizeof buf, n);
+    out.append(buf, static_cast<size_t>(end - buf));
+}
+
 constexpr size_t kMaxBulkLen = 512 * 1024 * 1024;  // Redis's limit for one string
 constexpr size_t kMaxArgs = 1024 * 1024;
 constexpr size_t kMaxInline = 64 * 1024;
@@ -25,57 +32,67 @@ std::optional<int64_t> read_int_line(std::string_view buf, size_t& pos, bool& ba
     return value;
 }
 
-ParseResult parse_inline(std::string_view buf) {
+ParseStatus parse_inline(std::string_view buf, Command& out, size_t& consumed, std::string& error) {
     size_t end = buf.find('\n');
     if (end == std::string_view::npos) {
-        if (buf.size() > kMaxInline) return {ParseStatus::Error, {}, 0, "inline command too long"};
-        return {ParseStatus::Incomplete, {}, 0, {}};
+        if (buf.size() > kMaxInline) return error = "inline command too long", ParseStatus::Error;
+        return ParseStatus::Incomplete;
     }
     std::string_view line = buf.substr(0, end);
     if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
-    Command cmd;
+    out.clear();
     size_t i = 0;
     while (i < line.size()) {
         while (i < line.size() && line[i] == ' ') ++i;
         size_t start = i;
         while (i < line.size() && line[i] != ' ') ++i;
-        if (i > start) cmd.emplace_back(line.substr(start, i - start));
+        if (i > start) out.emplace_back(line.substr(start, i - start));
     }
-    return {ParseStatus::Ok, std::move(cmd), end + 1, {}};
+    consumed = end + 1;
+    return ParseStatus::Ok;
 }
 
 }  // namespace
 
-ParseResult parse_command(std::string_view buf) {
-    if (buf.empty()) return {ParseStatus::Incomplete, {}, 0, {}};
-    if (buf[0] != '*') return parse_inline(buf);
+ParseStatus parse_command_into(std::string_view buf, Command& out, size_t& consumed, std::string& error) {
+    if (buf.empty()) return ParseStatus::Incomplete;
+    if (buf[0] != '*') return parse_inline(buf, out, consumed, error);
 
     size_t pos = 1;
     bool bad = false;
     auto count = read_int_line(buf, pos, bad);
-    if (bad) return {ParseStatus::Error, {}, 0, "invalid multibulk length"};
-    if (!count) return {ParseStatus::Incomplete, {}, 0, {}};
+    if (bad) return error = "invalid multibulk length", ParseStatus::Error;
+    if (!count) return ParseStatus::Incomplete;
     if (*count < 0 || static_cast<size_t>(*count) > kMaxArgs)
-        return {ParseStatus::Error, {}, 0, "invalid multibulk length"};
+        return error = "invalid multibulk length", ParseStatus::Error;
 
-    Command cmd;
-    cmd.reserve(static_cast<size_t>(*count));
-    for (int64_t i = 0; i < *count; ++i) {
-        if (pos >= buf.size()) return {ParseStatus::Incomplete, {}, 0, {}};
-        if (buf[pos] != '$') return {ParseStatus::Error, {}, 0, "expected '$'"};
+    size_t n_args = static_cast<size_t>(*count);
+    if (out.size() < n_args) out.resize(n_args);  // grow only; strings keep their capacity
+    for (size_t i = 0; i < n_args; ++i) {
+        if (pos >= buf.size()) return ParseStatus::Incomplete;
+        if (buf[pos] != '$') return error = "expected '$'", ParseStatus::Error;
         ++pos;
         auto len = read_int_line(buf, pos, bad);
-        if (bad) return {ParseStatus::Error, {}, 0, "invalid bulk length"};
-        if (!len) return {ParseStatus::Incomplete, {}, 0, {}};
+        if (bad) return error = "invalid bulk length", ParseStatus::Error;
+        if (!len) return ParseStatus::Incomplete;
         if (*len < 0 || static_cast<size_t>(*len) > kMaxBulkLen)
-            return {ParseStatus::Error, {}, 0, "invalid bulk length"};
+            return error = "invalid bulk length", ParseStatus::Error;
         size_t n = static_cast<size_t>(*len);
-        if (buf.size() < pos + n + 2) return {ParseStatus::Incomplete, {}, 0, {}};
-        if (buf.substr(pos + n, 2) != "\r\n") return {ParseStatus::Error, {}, 0, "bulk string not terminated"};
-        cmd.emplace_back(buf.substr(pos, n));
+        if (buf.size() < pos + n + 2) return ParseStatus::Incomplete;
+        if (buf.substr(pos + n, 2) != "\r\n") return error = "bulk string not terminated", ParseStatus::Error;
+        out[i].assign(buf.data() + pos, n);
         pos += n + 2;
     }
-    return {ParseStatus::Ok, std::move(cmd), pos, {}};
+    out.resize(n_args);  // drop leftovers from a longer previous command
+    consumed = pos;
+    return ParseStatus::Ok;
+}
+
+ParseResult parse_command(std::string_view buf) {
+    ParseResult r{ParseStatus::Incomplete, {}, 0, {}};
+    r.status = parse_command_into(buf, r.command, r.consumed, r.error);
+    if (r.status != ParseStatus::Ok) r.command.clear();
+    return r;
 }
 
 void reply_simple(std::string& out, std::string_view s) {
@@ -92,13 +109,13 @@ void reply_error(std::string& out, std::string_view msg) {
 
 void reply_int(std::string& out, int64_t n) {
     out += ':';
-    out += std::to_string(n);
+    append_int(out, n);
     out += "\r\n";
 }
 
 void reply_bulk(std::string& out, std::string_view s) {
     out += '$';
-    out += std::to_string(s.size());
+    append_int(out, static_cast<int64_t>(s.size()));
     out += "\r\n";
     out += s;
     out += "\r\n";
@@ -108,7 +125,7 @@ void reply_null(std::string& out) { out += "$-1\r\n"; }
 
 void reply_array_header(std::string& out, size_t n) {
     out += '*';
-    out += std::to_string(n);
+    append_int(out, static_cast<int64_t>(n));
     out += "\r\n";
 }
 

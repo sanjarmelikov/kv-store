@@ -27,6 +27,8 @@ public:
     explicit Store(Millis (*clock)() = now_ms);
 
     std::optional<std::string> get(const std::string& key);
+    // Like get() but without copying the value; the pointer is valid until the next write.
+    const std::string* find(const std::string& key);
     void set(const std::string& key, std::string value, std::optional<Millis> expire_at = std::nullopt);
     bool del(const std::string& key);
     bool exists(const std::string& key);

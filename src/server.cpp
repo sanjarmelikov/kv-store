@@ -142,15 +142,16 @@ void Server::on_readable(int fd) {
     // Run every complete command in the buffer (clients may pipeline many per read).
     size_t pos = 0;
     while (pos < c.in.size() && !c.close_after_write) {
-        ParseResult r = parse_command(std::string_view(c.in).substr(pos));
-        if (r.status == ParseStatus::Incomplete) break;
-        if (r.status == ParseStatus::Error) {
-            reply_error(c.out, "ERR Protocol error: " + r.error);
+        size_t consumed = 0;
+        ParseStatus st = parse_command_into(std::string_view(c.in).substr(pos), c.cmd, consumed, c.parse_error);
+        if (st == ParseStatus::Incomplete) break;
+        if (st == ParseStatus::Error) {
+            reply_error(c.out, "ERR Protocol error: " + c.parse_error);
             c.close_after_write = true;
             break;
         }
-        pos += r.consumed;
-        if (!engine_.execute(r.command, c.out)) c.close_after_write = true;
+        pos += consumed;
+        if (!engine_.execute(c.cmd, c.out)) c.close_after_write = true;
     }
     c.in.erase(0, pos);  // keep any partial command for the next read
 }
