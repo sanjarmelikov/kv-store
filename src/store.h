@@ -44,6 +44,14 @@ public:
 
     std::vector<std::string> keys(const std::string& pattern);
 
+    // Visit every live key (expired ones skipped). Used by the AOF rewrite child.
+    template <typename F>
+    void for_each(F&& fn) const {
+        Millis now = clock_();
+        for (const auto& [key, e] : map_)
+            if (e.expire_at == 0 || e.expire_at > now) fn(key, e.value, e.expire_at);
+    }
+
     // One round of active expiry: sample up to `sample` keys with deadlines and
     // delete expired ones, repeating while more than 25% of a sample was expired
     // (capped by `max_rounds`). Returns how many keys were deleted.

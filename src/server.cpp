@@ -93,7 +93,16 @@ void Server::run() {
         Millis now = now_ms();
         if (now - last_tick >= kTickMs) {
             store_.expire_cycle();
-            if (aof_) aof_->tick();
+            if (aof_) {
+                aof_->tick();
+                aof_->poll_rewrite();
+                size_t base = std::max<size_t>(aof_->size_after_last_rewrite(), 1);
+                if (config_.auto_aof_rewrite_percentage > 0 && !aof_->rewriting() &&
+                    aof_->bytes_written() >= config_.auto_aof_rewrite_min_size &&
+                    (aof_->bytes_written() - std::min(aof_->bytes_written(), base)) * 100 / base >=
+                        static_cast<size_t>(config_.auto_aof_rewrite_percentage))
+                    aof_->begin_rewrite(store_);
+            }
             last_tick = now;
         }
     }
@@ -264,6 +273,13 @@ void Server::hello(Conn& c, int fd) {
 
 bool Server::check_auth(Conn& c, int fd) {
     const Command& cmd = c.cmd;
+    if (is_named(cmd, "BGREWRITEAOF") && (config_.requirepass.empty() || c.authed)) {
+        if (!aof_) reply_error(c.out, "ERR AOF is not enabled (start with --aof)");
+        else if (!aof_->begin_rewrite(store_))
+            reply_error(c.out, "ERR Background append only file rewriting already in progress");
+        else reply_simple(c.out, "Background append only file rewriting started");
+        return true;
+    }
     if (is_named(cmd, "HELLO")) {
         hello(c, fd);
         return true;

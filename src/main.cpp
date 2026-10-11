@@ -20,6 +20,7 @@ void handle_signal(int) {
 void usage() {
     std::cerr << "usage: kv-store [--bind ADDR] [--port N] [--aof PATH] [--appendfsync always|everysec|no]\n"
                  "                [--requirepass PASSWORD] [--max-output-buffer BYTES]\n"
+                 "                [--auto-aof-rewrite-percentage N] [--auto-aof-rewrite-min-size BYTES]\n"
                  "  KV_REQUIREPASS in the environment also sets the password (keeps it out of `ps`).\n";
 }
 
@@ -48,6 +49,8 @@ int main(int argc, char** argv) {
             }
         }
         else if (arg == "--requirepass") config.requirepass = next();
+        else if (arg == "--auto-aof-rewrite-percentage") config.auto_aof_rewrite_percentage = std::atoi(next().c_str());
+        else if (arg == "--auto-aof-rewrite-min-size") config.auto_aof_rewrite_min_size = std::strtoull(next().c_str(), nullptr, 10);
         else if (arg == "--max-output-buffer") config.max_output_buffer = std::strtoull(next().c_str(), nullptr, 10);
         else if (arg == "--help" || arg == "-h") return usage(), 0;
         else return usage(), 2;

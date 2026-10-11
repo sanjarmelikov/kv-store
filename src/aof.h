@@ -41,7 +41,22 @@ public:
 
     size_t bytes_written() const { return written_; }
 
+    // ---- rewrite (compaction), Redis-style ----
+    // Start a rewrite: fork a child that writes the store's current state to a temp
+    // file; from now on, appended commands are also kept in a rewrite buffer.
+    // Returns false (and does nothing) if a rewrite is already running.
+    bool begin_rewrite(Store& store);
+    // Called periodically by the event loop: if the child finished, append the
+    // rewrite buffer to its file, fsync, and atomically replace the AOF with it.
+    void poll_rewrite();
+    bool rewriting() const { return child_ > 0; }
+    size_t size_after_last_rewrite() const { return base_size_; }
+
 private:
+    int child_ = -1;               // pid of the rewriting child, or -1
+    std::string rewrite_path_;
+    std::string rewrite_buf_;      // commands appended since the fork
+    size_t base_size_ = 0;         // AOF size right after the last rewrite (for auto-rewrite)
     std::string path_;
     FsyncPolicy policy_;
     int fd_ = -1;

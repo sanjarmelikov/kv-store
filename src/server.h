@@ -28,6 +28,10 @@ struct ServerConfig {
     // A client whose unsent replies exceed this many bytes is disconnected (it isn't
     // reading). 0 = unlimited, which is Redis's default for normal clients.
     size_t max_output_buffer = 512 * 1024 * 1024;
+    // Auto-rewrite the AOF once it has grown this many percent past its size after the
+    // last rewrite (and is at least aof_rewrite_min_size). 0 disables. Same knobs as Redis.
+    int auto_aof_rewrite_percentage = 100;
+    size_t auto_aof_rewrite_min_size = 64 * 1024 * 1024;
 };
 
 class Server {
