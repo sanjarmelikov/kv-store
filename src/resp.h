@@ -41,7 +41,8 @@ void reply_simple(std::string& out, std::string_view s);        // +OK
 void reply_error(std::string& out, std::string_view msg);       // -ERR ...
 void reply_int(std::string& out, int64_t n);                    // :42
 void reply_bulk(std::string& out, std::string_view s);          // $5\r\nhello
-void reply_null(std::string& out);                              // $-1 (missing key)
+void reply_null(std::string& out, int proto = 2);               // $-1 (RESP2) or _ (RESP3)
+void reply_map_header(std::string& out, size_t n, int proto);   // %n (RESP3) or *2n (RESP2)
 void reply_array_header(std::string& out, size_t n);            // *n, followed by n values
 
 // Encode a command as a RESP array (used for the append-only file).

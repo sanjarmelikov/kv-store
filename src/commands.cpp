@@ -89,7 +89,7 @@ bool Engine::execute(const Command& cmd, std::string& out) {
     } else if (name == "GET") {
         if (argc != 2) return wrong_args(out, name), true;
         const std::string* v = store_.find(cmd[1]);
-        v ? reply_bulk(out, *v) : reply_null(out);
+        v ? reply_bulk(out, *v) : reply_null(out, proto_);
     } else if (name == "SET") {
         if (argc < 3) return wrong_args(out, name), true;
         std::optional<Millis> deadline;
@@ -112,7 +112,7 @@ bool Engine::execute(const Command& cmd, std::string& out) {
         }
         if ((nx && xx) || (keepttl && deadline)) return reply_error(out, "ERR syntax error"), true;
         bool exists = store_.exists(cmd[1]);
-        if ((nx && exists) || (xx && !exists)) return reply_null(out), true;
+        if ((nx && exists) || (xx && !exists)) return reply_null(out, proto_), true;
         if (keepttl) deadline = store_.deadline(cmd[1]);
         store_.set(cmd[1], cmd[2], deadline);
         // Log an absolute deadline (PXAT) so replaying the file later doesn't restart the clock.
@@ -126,7 +126,7 @@ bool Engine::execute(const Command& cmd, std::string& out) {
         reply_array_header(out, argc - 1);
         for (size_t i = 1; i < argc; ++i) {
             const std::string* v = store_.find(cmd[i]);
-            v ? reply_bulk(out, *v) : reply_null(out);
+            v ? reply_bulk(out, *v) : reply_null(out, proto_);
         }
     } else if (name == "MSET") {
         if (argc < 3 || argc % 2 == 0) return wrong_args(out, name), true;

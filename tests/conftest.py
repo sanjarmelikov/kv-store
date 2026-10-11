@@ -19,12 +19,14 @@ def free_port() -> int:
 
 
 class Server:
-    def __init__(self, aof: Path, fsync: str = "everysec"):
+    def __init__(self, aof: Path, fsync: str = "everysec", extra_args: list[str] | None = None):
         self.aof, self.fsync, self.port, self.proc = aof, fsync, free_port(), None
+        self.extra_args = extra_args or []
 
     def start(self) -> "Server":
         self.proc = subprocess.Popen(
-            [str(BINARY), "--port", str(self.port), "--aof", str(self.aof), "--appendfsync", self.fsync],
+            [str(BINARY), "--port", str(self.port), "--aof", str(self.aof), "--appendfsync", self.fsync,
+             *self.extra_args],
             stderr=subprocess.PIPE, text=True,
         )
         deadline = time.time() + 5

@@ -24,6 +24,10 @@ struct ServerConfig {
     std::string aof_path;  // empty = no persistence
     FsyncPolicy fsync = FsyncPolicy::EverySec;
     size_t max_clients = 10000;
+    std::string requirepass;  // non-empty: clients must AUTH before any other command
+    // A client whose unsent replies exceed this many bytes is disconnected (it isn't
+    // reading). 0 = unlimited, which is Redis's default for normal clients.
+    size_t max_output_buffer = 512 * 1024 * 1024;
 };
 
 class Server {
@@ -43,7 +47,14 @@ private:
         bool close_after_write = false;
         Command cmd;  // reused for every command on this connection
         std::string parse_error;
+        bool authed = false;
+        int proto = 2;  // RESP version negotiated with HELLO
     };
+
+    // Handles AUTH and blocks everything else until the connection has authenticated.
+    // Returns true if the command was fully handled here.
+    bool check_auth(Conn& c, int fd);
+    void hello(Conn& c, int fd);
 
     void accept_clients();
     void on_readable(int fd);

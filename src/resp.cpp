@@ -121,7 +121,14 @@ void reply_bulk(std::string& out, std::string_view s) {
     out += "\r\n";
 }
 
-void reply_null(std::string& out) { out += "$-1\r\n"; }
+void reply_null(std::string& out, int proto) { out += proto == 3 ? "_\r\n" : "$-1\r\n"; }
+
+void reply_map_header(std::string& out, size_t n, int proto) {
+    // RESP3 has a real map type; RESP2 sends the same pairs as a flat array.
+    out += proto == 3 ? '%' : '*';
+    append_int(out, static_cast<int64_t>(proto == 3 ? n : 2 * n));
+    out += "\r\n";
+}
 
 void reply_array_header(std::string& out, size_t n) {
     out += '*';

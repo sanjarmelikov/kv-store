@@ -12,4 +12,6 @@ COPY --from=build /src/build/kv-store /usr/local/bin/kv-store
 VOLUME /data
 EXPOSE 6379
 ENTRYPOINT ["kv-store", "--bind", "0.0.0.0", "--port", "6379", "--aof", "/data/appendonly.aof"]
+# Set a password at run time: docker run -e KV_REQUIREPASS=... (the server warns if it's
+# reachable from outside without one).
 CMD ["--appendfsync", "everysec"]

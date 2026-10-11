@@ -21,6 +21,8 @@ $ redis-cli -p 6380 TTL greeting
 | Keyspace + TTL | `store.cpp` | Hash map plus expiry deadlines. **Lazy** expiry on access, and **active** expiry: every 100 ms, sample 20 keys that have deadlines and delete the expired ones, repeating while more than 25% of a sample was expired (Redis's algorithm). |
 | Persistence | `aof.cpp` | Every write is appended as RESP and **written before any reply is sent**, so an acknowledged write is in the OS page cache. `--appendfsync always\|everysec\|no` controls fsync. Relative TTLs are logged as absolute deadlines, so a restart doesn't reset them. A torn last command (crash mid-write) is cut off on startup. |
 | Commands | `commands.cpp` | `PING ECHO GET SET (EX PX EXAT PXAT NX XX KEEPTTL) MGET MSET DEL EXISTS INCR DECR INCRBY DECRBY APPEND STRLEN EXPIRE PEXPIRE EXPIREAT PEXPIREAT TTL PTTL PERSIST KEYS DBSIZE FLUSHALL FLUSHDB INFO SELECT QUIT`, plus `COMMAND`/`CONFIG`/`CLIENT` stubs that real clients send on connect. |
+| Handshake + auth | `server.cpp` | `HELLO 2\|3 [AUTH user pass]` negotiates RESP2 or **RESP3** per connection (redis-py 8 defaults to RESP3). `--requirepass` / `KV_REQUIREPASS` enables `AUTH`; passwords are compared in constant time. |
+| Resource limits | `server.cpp` | A client whose unread replies exceed `--max-output-buffer` (default 512 MB) is disconnected, so one slow client can't exhaust memory. Query buffers are capped at 1 GB, as in Redis. |
 
 ## Testing
 
@@ -32,6 +34,8 @@ python3 -m venv .venv && .venv/bin/pip install redis pytest && .venv/bin/pytest 
 - **Unit tests** (C++): parser edge cases (every prefix of a command is "incomplete", binary values, pipelining), TTL with an injected clock, active expiry of 1,000 unread keys, glob matching, every command's replies, and AOF replay including a torn tail. They also pass under AddressSanitizer + UBSan.
 - **Integration tests** (redis-py against the real binary): commands, a 1 MB binary value, 10,000 pipelined commands, 50 clients incrementing one counter (exactly 10,000), active expiry observed through `INFO`, restart with AOF replay (TTLs preserved), and protocol errors.
 - **Crash test:** a client writes as fast as it can while the server is killed with `SIGKILL` (no cleanup). After a restart, **every acknowledged write is present: 0 lost, under each of `always`, `everysec` and `no`.** That's expected for a process crash, since acknowledged writes are already in the OS page cache. Surviving a *power* loss is what `always` (fsync before replying) is for.
+- **Edge cases** (`tests/test_edge_cases.py`): a command sent one byte at a time, a client vanishing mid-command, every kind of malformed RESP, a 64 KB inline line, 500 simultaneous connections, a client that never reads, interactive `redis-cli`, awkward binary keys, a corrupt AOF, a port already in use.
+- **Security** (`tests/test_security.py`): AUTH required with a password, wrong passwords rejected, `redis-cli -a`, the password from the environment, RESP2 and RESP3 clients, the HELLO handshake, the output-buffer cut-off.
 - **Linux:** `docker build .` compiles with GCC and runs the unit tests; the container's server reports `epoll` and replays its AOF after `docker restart`.
 
 ## Performance

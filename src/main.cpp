@@ -18,7 +18,9 @@ void handle_signal(int) {
 }
 
 void usage() {
-    std::cerr << "usage: kv-store [--bind ADDR] [--port N] [--aof PATH] [--appendfsync always|everysec|no]\n";
+    std::cerr << "usage: kv-store [--bind ADDR] [--port N] [--aof PATH] [--appendfsync always|everysec|no]\n"
+                 "                [--requirepass PASSWORD] [--max-output-buffer BYTES]\n"
+                 "  KV_REQUIREPASS in the environment also sets the password (keeps it out of `ps`).\n";
 }
 
 }  // namespace
@@ -37,10 +39,24 @@ int main(int argc, char** argv) {
         if (arg == "--bind") config.bind = next();
         else if (arg == "--port") config.port = std::atoi(next().c_str());
         else if (arg == "--aof") config.aof_path = next();
-        else if (arg == "--appendfsync") config.fsync = kv::parse_fsync_policy(next());
+        else if (arg == "--appendfsync") {
+            try {
+                config.fsync = kv::parse_fsync_policy(next());
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "kv-store: " << e.what() << "\n";
+                return 2;
+            }
+        }
+        else if (arg == "--requirepass") config.requirepass = next();
+        else if (arg == "--max-output-buffer") config.max_output_buffer = std::strtoull(next().c_str(), nullptr, 10);
         else if (arg == "--help" || arg == "-h") return usage(), 0;
         else return usage(), 2;
     }
+
+    if (const char* pass = std::getenv("KV_REQUIREPASS"); pass && config.requirepass.empty())
+        config.requirepass = pass;
+    if (config.bind != "127.0.0.1" && config.requirepass.empty())
+        std::cerr << "warning: listening on " << config.bind << " with no password; set KV_REQUIREPASS\n";
 
     std::signal(SIGPIPE, SIG_IGN);  // a client vanishing mid-write must not kill the server
     try {

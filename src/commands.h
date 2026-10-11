@@ -20,6 +20,10 @@ public:
     // Apply a command read back from the AOF (no reply, no re-logging).
     void replay(const Command& cmd);
 
+    // Protocol version (2 or 3) of the connection whose command runs next; set by the
+    // server per connection after HELLO. Only affects how "no value" is encoded.
+    void set_protocol(int proto) { proto_ = proto; }
+
 private:
     // True when writes must be appended to the AOF. Every log({...}) call is guarded
     // by this, so the command copy is only built when persistence is on.
@@ -28,6 +32,7 @@ private:
     Store& store_;
     Aof* aof_;
     bool replaying_ = false;
+    int proto_ = 2;
 };
 
 }  // namespace kv
