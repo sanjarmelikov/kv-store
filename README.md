@@ -2,6 +2,15 @@
 
 A Redis-compatible in-memory key-value server in C++17: a single-threaded event loop (epoll on Linux, kqueue on macOS), the RESP wire protocol, key expiry, and append-only-file persistence. It works with the standard `redis-cli`, `redis-benchmark`, and client libraries such as redis-py.
 
+## Highlights
+
+| Claim | Evidence |
+|---|---|
+| Single-threaded **epoll** event loop (kqueue on macOS) speaking **RESP2/RESP3**; **31 commands**; works with `redis-cli` and redis-py | [Design](#design); Linux CI runs every test against the epoll build |
+| TTL with lazy deletion + active sampling; **append-only file** with configurable fsync and fork-based compaction | `src/store.cpp`, `src/aof.cpp` |
+| **kill -9 after 5,000+ acknowledged writes: 0 lost**, under every fsync policy | `tests/test_integration.py::test_kill_9_loses_no_acknowledged_write` |
+| redis-benchmark, 50 clients, 1M keys (pipelined): **matches Redis on GET, +30% on SET**; removing per-command allocations: **+11% SET** | [Performance](#performance), `results/benchmark.jsonl`, `results/ab.jsonl` |
+
 ```console
 $ ./build/kv-store --port 6380 --aof data/appendonly.aof --appendfsync everysec
 kv-store listening on 127.0.0.1:6380 (kqueue, AOF on, 0 commands replayed)
