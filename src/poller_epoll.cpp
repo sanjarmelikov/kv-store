@@ -21,7 +21,7 @@ public:
     ~EpollPoller() override { ::close(epfd_); }
 
     void add(int fd) override { ctl(EPOLL_CTL_ADD, fd, EPOLLIN); }
-    void want_write(int fd, bool enabled) override { ctl(EPOLL_CTL_MOD, fd, EPOLLIN | (enabled ? EPOLLOUT : 0)); }
+    void want_write(int fd, bool enabled) override { ctl(EPOLL_CTL_MOD, fd, EPOLLIN | (enabled ? static_cast<uint32_t>(EPOLLOUT) : 0u)); }
     void remove(int fd) override { ::epoll_ctl(epfd_, EPOLL_CTL_DEL, fd, nullptr); }
 
     int wait(std::vector<Event>& out, int timeout_ms) override {
