@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest   # Linux, so this exercises the epoll event loop
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (with warnings as errors)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Werror"
+          cmake --build build -j
+      - name: Unit tests
+        run: ./build/unit_tests
+      - name: Unit tests under AddressSanitizer + UBSan
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build build-asan -j
+          ./build-asan/unit_tests
+      - name: Integration tests (redis-py + redis-cli against the real binary)
+        run: |
+          sudo apt-get update && sudo apt-get install -y redis-tools
+          python3 -m pip install redis pytest pytest-timeout
+          python3 -m pytest tests/ --timeout 120 -q

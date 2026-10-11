@@ -66,3 +66,14 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Build output and local tooling
+build/
+build-*/
+.venv/
+__pycache__/
+.pytest_cache/
+*.aof
+
+# Personal study notes (not published)
+notes/
