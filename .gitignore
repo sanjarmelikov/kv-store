@@ -74,3 +74,6 @@ build-*/
 __pycache__/
 .pytest_cache/
 *.aof
+
+# Personal study notes (not published)
+notes/
