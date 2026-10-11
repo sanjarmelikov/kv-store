@@ -117,7 +117,7 @@ def test_kill_9_loses_no_acknowledged_write(tmp_path, fsync):
 
     t = threading.Thread(target=writer)
     t.start()
-    while len(acked) < 2000:
+    while len(acked) < 5000:  # at least 5,000 acknowledged writes before the crash
         time.sleep(0.01)
     server.proc.send_signal(signal.SIGKILL)  # no cleanup, no final flush
     server.proc.wait()
